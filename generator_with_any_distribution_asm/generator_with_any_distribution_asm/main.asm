@@ -16,11 +16,10 @@ public _random_number_shift_register
 .data
 ;constans for main program and some variables for outputting uint32 numbers and waiting for enter pressed
 get_enter_buffer db 1
-uint32_printf_output db "%u", 10, 0
+uint32_printf_output db "%d", 10, 0
 uint32_x2_printf_output db "%u %u", 10, 0
 press_enter_msg db "press enter to continue", 10, 0
 ITERATION_COUNTER_END EQU 10000
-RAND_MAX_CONST EQU 0ffffffffh
 
 ;constans and variables for shift register
 P_CONST EQU 7
@@ -31,6 +30,7 @@ actual_starting_vector dd 00000045h
 
 ;constans and variables for inverted distribution
 INTERVALS_CONST dd 0.2,0.6,0.9,1.0
+RAND_MAX_CONST dd 07fffffffh
 
 ;constans and variables for elimination method
 a_CONST EQU 30 
@@ -91,13 +91,39 @@ _random_number_shift_register ENDP
 _random_number_inverted_distribution_generator PROC
 	push ebp
 	mov ebp,esp
-	push ebx
 	push esi 
 	push edi
 
+	;random float - esi
+	call _random_number_shift_register
+	and eax, 07fffffffh
+	push eax
+	finit 
+	fild dword ptr [esp]
+	fild RAND_MAX_CONST
+	fdivp
+	fstp dword ptr [esp]
+	pop esi
+
+	;compare random with intervals
+	mov ecx,0
+	compare_with_intervals:
+		inc ecx
+		;here we compare floats, sign bit is always set on 0
+		;if exponent (more significant bits) is greater, then number is greater
+		;in case of exponent equal
+		;if mantysa (less significant bits) is greater, then number is greater
+		cmp	esi,[INTERVALS_CONST + 4* ecx - 4]
+	ja compare_with_intervals
+
+	push ecx
+	push OFFSET uint32_printf_output
+	call _printf
+	add esp,4
+	pop eax
+
 	pop edi
 	pop esi
-	pop ebx
 	pop ebp
 	ret
 _random_number_inverted_distribution_generator ENDP
@@ -143,6 +169,7 @@ _random_number_elimination_method_generator PROC
 	push OFFSET uint32_x2_printf_output
 	call _printf
 	add esp,12
+	mov eax,edi
 
 	not_print:
 	pop ebx
